@@ -63,7 +63,6 @@ func setMute(b bool) error {
 }
 
 func main() {
-	// Create the switch accessory.
 	a := accessory.NewLightbulb(accessory.Info{
 		Name: "MacBook Pro",
 	})
@@ -72,7 +71,7 @@ func main() {
 	})
 	ch := characteristic.NewBrightness()
 	ch.OnValueRemoteUpdate(func(v int) {
-		setVolume(v % 100)
+		setVolume(v)
 	})
 	go func() {
 		for range time.NewTicker(time.Second * 10).C {
