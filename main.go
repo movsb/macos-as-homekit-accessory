@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/brutella/hap"
@@ -62,32 +63,69 @@ func setMute(b bool) error {
 	return nil
 }
 
+func lockScreen() error {
+	in := `
+tell application "System Events"
+	keystroke "q" using {control down, command down}
+end tell`
+	cmd := exec.Command(`osascript`)
+	cmd.Stdin = strings.NewReader(in)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
-	a := accessory.NewLightbulb(accessory.Info{
-		Name: "MacBook Pro",
-	})
-	a.Lightbulb.On.OnValueRemoteUpdate(func(v bool) {
-		setMute(!v)
-	})
-	ch := characteristic.NewBrightness()
-	ch.OnValueRemoteUpdate(func(v int) {
-		setVolume(v)
-	})
-	go func() {
-		for range time.NewTicker(time.Second * 10).C {
-			if v := getVolume(); v != -1 {
-				ch.SetValue(v)
+	var accessories []*accessory.A
+
+	{
+		a := accessory.NewLightbulb(accessory.Info{
+			Name: "MacBook Pro",
+		})
+		a.Lightbulb.On.OnValueRemoteUpdate(func(v bool) {
+			setMute(!v)
+		})
+		ch := characteristic.NewBrightness()
+		ch.OnValueRemoteUpdate(func(v int) {
+			setVolume(v)
+		})
+		go func() {
+			for range time.NewTicker(time.Second * 10).C {
+				if v := getVolume(); v != -1 {
+					ch.SetValue(v)
+				}
+				a.Lightbulb.On.SetValue(!getMute())
 			}
-			a.Lightbulb.On.SetValue(!getMute())
-		}
-	}()
-	a.Lightbulb.AddC(ch.C)
+		}()
+		a.Lightbulb.AddC(ch.C)
+
+		accessories = append(accessories, a.A)
+	}
+
+	{
+		a := accessory.NewSwitch(accessory.Info{
+			Name: `Lock Screen`,
+		})
+		a.Switch.On.OnValueRemoteUpdate(func(v bool) {
+			if !v {
+				lockScreen()
+			}
+			// 由于当前没有获取打开与否状态的能力，始终开启
+			a.Switch.On.SetValue(true)
+		})
+		accessories = append(accessories, a.A)
+	}
 
 	// Store the data in the "./db" directory.
 	fs := hap.NewFsStore("./db")
 
+	b := accessory.NewBridge(accessory.Info{
+		Name: `MacOS HomeKit`,
+	})
+
 	// Create the hap server.
-	server, err := hap.NewServer(fs, a.A)
+	server, err := hap.NewServer(fs, b.A, accessories...)
 	if err != nil {
 		// stop if an error happens
 		log.Panic(err)
