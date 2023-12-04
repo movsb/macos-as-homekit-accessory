@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/brutella/hap"
@@ -76,12 +78,40 @@ end tell`
 	return nil
 }
 
+func observeScreenLock(b chan<- bool) error {
+	cmd := exec.Command(`./lock`)
+	r, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		br := bufio.NewScanner(r)
+		for br.Scan() {
+			line := br.Text()
+			switch {
+			case strings.Contains(line, `Screen Locked`):
+				b <- true
+			case strings.Contains(line, `Screen Unlocked`):
+				b <- false
+			}
+			log.Println(br.Text())
+		}
+		log.Println(br.Err())
+	}()
+
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	var accessories []*accessory.A
 
 	{
 		a := accessory.NewLightbulb(accessory.Info{
-			Name: "MacBook Pro",
+			Name: "MacOS Volume",
 		})
 		a.Lightbulb.On.OnValueRemoteUpdate(func(v bool) {
 			setMute(!v)
@@ -104,16 +134,32 @@ func main() {
 	}
 
 	{
+		screenLocked := atomic.Bool{}
 		a := accessory.NewSwitch(accessory.Info{
-			Name: `Lock Screen`,
+			Name: `MacOS Lock Screen`,
 		})
 		a.Switch.On.OnValueRemoteUpdate(func(v bool) {
 			if !v {
 				lockScreen()
 			}
-			// 由于当前没有获取打开与否状态的能力，始终开启
-			a.Switch.On.SetValue(true)
+			a.Switch.On.SetValue(screenLocked.Load())
 		})
+		a.Switch.On.SetValue(true)
+
+		b := make(chan bool)
+		go func() {
+			if err := observeScreenLock(b); err != nil {
+				log.Println(err)
+			}
+		}()
+		go func() {
+			for locked := range b {
+				a.Switch.On.SetValue(!locked)
+				log.Println("屏幕锁定：", locked)
+				screenLocked.Store(locked)
+			}
+		}()
+
 		accessories = append(accessories, a.A)
 	}
 
