@@ -194,5 +194,5 @@ func main() {
 
 	// Run the server.
 	server.Addr = ":6242" // MAHA
-	server.ListenAndServe(ctx)
+	log.Fatalln(server.ListenAndServe(ctx))
 }

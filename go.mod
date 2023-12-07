@@ -1,11 +1,12 @@
 // MacOS as a HomeKit Accessory
-module maaha
+module maha
 
 go 1.20
 
+require github.com/brutella/hap v0.0.28
+
 require (
 	github.com/brutella/dnssd v1.2.10 // indirect
-	github.com/brutella/hap v0.0.28 // indirect
 	github.com/go-chi/chi v1.5.4 // indirect
 	github.com/miekg/dns v1.1.54 // indirect
 	github.com/tadglines/go-pkgs v0.0.0-20210623144937-b983b20f54f9 // indirect
